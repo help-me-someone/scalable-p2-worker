@@ -57,7 +57,7 @@ func makeAWSClient(region string) (*s3.Client, error) {
 func main() {
 
 	// Create temp folder for files to live in.
-	paths := []string{"temp", "temp/convert", "temp/thumbnail"}
+	paths := []string{"temp", "temp/convert", "temp/thumbnail", "temp/save"}
 	for _, path := range paths {
 		if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
 			err := os.Mkdir(path, os.ModePerm)
@@ -79,6 +79,7 @@ func main() {
 	mux := asynq.NewServeMux()
 	mux.HandleFunc(TypeVideoSave, taskHandler.WithContext(HandleVideoSaveTask))
 	mux.HandleFunc(TypeVideoThumbnail, taskHandler.WithContext(HandleVideoThumbnailTask))
+	mux.HandleFunc(TypeVideoConvertMPD, taskHandler.WithContext(HandleVideoConvertMPDTask))
 
 	if err := srv.Run(mux); err != nil {
 		log.Fatal(err)
