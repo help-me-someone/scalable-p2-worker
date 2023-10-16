@@ -8,7 +8,6 @@ import (
 	"io"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -157,7 +156,7 @@ func HandleVideoSaveTask(ctx context.Context, t *asynq.Task) error {
 	err = ffmpeg.Input(filePath).Output(convertedFilePath).OverWriteOutput().Run()
 
 	if err != nil {
-		log.Panicln("Failed to convert video to mp4")
+		log.Printf("Failed to convert video to mp4")
 		return err
 	}
 
@@ -250,7 +249,8 @@ func HandleVideoConvertMPDTask(ctx context.Context, t *asynq.Task) error {
 		return err
 	}
 	log.Println("Job dir:", jobDir)
-	defer os.RemoveAll(jobDir)
+	// TODO: Uncomment this.
+	// defer os.RemoveAll(jobDir)
 
 	// Step 1. Make a new client.
 	// For aws.
@@ -282,36 +282,31 @@ func HandleVideoConvertMPDTask(ctx context.Context, t *asynq.Task) error {
 		return err
 	}
 
-	log.Println("Running mp4frag")
-
-	// Step 5. Make sure the mp4 is fragmented.
-	filePathMP4Frag := fmt.Sprintf("%s/%s-frag.%s", jobDir, p.VideoName, "mp4")
-	err = exec.Command("external/bento/bin/mp4fragment",
-		filePathMP4,
-		filePathMP4Frag,
-	).Run()
-	if err != nil {
-		log.Println("Failed running mp4frag")
-		return err
-	}
-
-	log.Println("Running mp4dash")
-	// Step 6. Convert the fragmented mp4 to mpd.
+	log.Println("Running ")
 
 	// Decare the directory the MPD files will go into
-	mpdDirPath, err := os.MkdirTemp(jobDir, "mpd")
+	mpdDirPath, err := os.MkdirTemp(jobDir, "hls")
 	if err != nil {
 		log.Println("Failed to create mpd directory")
 		return nil
 	}
+	// Step 5. HLS Path
+	filePathHLSPath := fmt.Sprintf("%s/%s.%s", mpdDirPath, "vid", "m3u8")
+	log.Println("HSL Path:", filePathHLSPath)
 
-	err = exec.Command("external/bento/bin/mp4dash",
-		filePathMP4Frag,
-		"--force", // Allow output to an existing directory.
-		fmt.Sprintf("--output-dir=%s", mpdDirPath), // We force it into an existing path.
-	).Run()
+	err = ffmpeg.
+		Input(filePathMP4).
+		Output(filePathHLSPath, ffmpeg.KwArgs{
+			"codec":         "copy",
+			"start_number":  0,
+			"hls_time":      10,
+			"hls_list_size": 0,
+			"f":             "hls",
+		}).
+		OverWriteOutput().
+		Run()
 	if err != nil {
-		log.Println("Failed running mp4dash")
+		log.Printf("Error: Failed to convert mp4 to HLS")
 		return err
 	}
 
