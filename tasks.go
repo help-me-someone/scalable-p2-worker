@@ -15,25 +15,34 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/help-me-someone/scalable-p2-db/functions/crud"
+	"github.com/help-me-someone/scalable-p2-db/models/video"
 	"github.com/hibiken/asynq"
 	ffmpeg "github.com/u2takey/ffmpeg-go"
+	"gorm.io/gorm"
 )
 
 type TaskHandler struct {
-	Client *asynq.Client
+	Client   *asynq.Client
+	Database *gorm.DB
 }
 
-func (h *TaskHandler) WithContext(task func(ctx context.Context, t *asynq.Task) error) func(ctx context.Context, t *asynq.Task) error {
+type Task func(ctx context.Context, t *asynq.Task) error
+
+func (h *TaskHandler) WithContext(task Task) Task {
 	return func(ctx context.Context, t *asynq.Task) error {
-		return task(context.WithValue(ctx, "client", h.Client), t)
+		ctx = context.WithValue(ctx, "client", h.Client)
+		ctx = context.WithValue(ctx, "database", h.Database)
+		return task(ctx, t)
 	}
 }
 
 // A list of task types.
 const (
-	TypeVideoSave       = "video:save"
-	TypeVideoThumbnail  = "video:thumbnail"
-	TypeVideoConvertMPD = "video:chunk"
+	TypeVideoSave           = "video:save"
+	TypeVideoThumbnail      = "video:thumbnail"
+	TypeVideoConvertMPD     = "video:chunk"
+	TypeVideoUpdateProgress = "video:update"
 )
 
 type VideoSavePayload struct {
@@ -51,6 +60,11 @@ type VideoConvertMPDPayload struct {
 	VideoName string
 }
 
+type VideoUpdateProgressPayload struct {
+	VideoName string
+	Status    uint8
+}
+
 //----------------------------------------------
 // Write a function NewXXXTask to create a task.
 // A task consists of a type and a payload.
@@ -61,7 +75,6 @@ func NewVideoSaveTask(userID string, videoName string) (*asynq.Task, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	return asynq.NewTask(TypeVideoSave, payload), nil
 }
 
@@ -70,7 +83,6 @@ func NewVideoThumbnailTask(userID string, videoName string) (*asynq.Task, error)
 	if err != nil {
 		return nil, err
 	}
-
 	return asynq.NewTask(TypeVideoThumbnail, payload), nil
 }
 
@@ -79,8 +91,15 @@ func NewVideoConvertMPDTask(userID string, videoName string) (*asynq.Task, error
 	if err != nil {
 		return nil, err
 	}
-
 	return asynq.NewTask(TypeVideoConvertMPD, payload), nil
+}
+
+func NewVideoUpdateProgressTask(videoName string, status uint8) (*asynq.Task, error) {
+	payload, err := json.Marshal(VideoUpdateProgressPayload{VideoName: videoName, Status: status})
+	if err != nil {
+		return nil, err
+	}
+	return asynq.NewTask(TypeVideoUpdateProgress, payload), nil
 }
 
 //---------------------------------------------------------------
@@ -448,6 +467,36 @@ func HandleVideoThumbnailTask(ctx context.Context, t *asynq.Task) error {
 	_, err = queueClient.Enqueue(t1)
 	if err != nil {
 		log.Println("Failed to queue MPD conversion task")
+		return err
+	}
+
+	return nil
+}
+
+func HandleVideoUpdateProgressTask(ctx context.Context, t *asynq.Task) error {
+	var p VideoUpdateProgressPayload
+	if err := json.Unmarshal(t.Payload(), &p); err != nil {
+		return fmt.Errorf("json.Unmarshal failed: %v: %w", err, asynq.SkipRetry)
+	}
+
+	// 1. Retrieve the database connection.
+	connection, ok := ctx.Value("database").(*gorm.DB)
+	if !ok {
+		log.Println("Error: No database connection for task context.")
+		return fmt.Errorf("No database connection in task's context.")
+	}
+
+	// 2. Get the video from the name.
+	vid, err := crud.GetVideoByKey(connection, p.VideoName)
+	if err != nil {
+		log.Println("Error: Could not retrieve video.")
+		return err
+	}
+
+	// 3. Update the status of the job.
+	err = crud.UpdateVideoStatus(connection, vid.ID, p.Status)
+	if err != nil {
+		log.Println("Error: Failed to update video status.")
 		return err
 	}
 

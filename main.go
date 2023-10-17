@@ -16,6 +16,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/hibiken/asynq"
+	"gorm.io/driver/mysql"
+	"gorm.io/gorm"
 )
 
 // Region for the s3 server.
@@ -68,18 +70,30 @@ func main() {
 	}
 
 	clientOpt := asynq.RedisClientOpt{Addr: "localhost:6379"}
+
+	// TODO: Load this via environments.
+	dsn := "user:password@tcp(mysql:3306)/toktik-db?charset=utf8mb4&parseTime=True&loc=Local"
+	toktik_db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
+	if err != nil {
+		log.Panicln("Error: Failed to connect to the database.")
+	}
+
 	srv := asynq.NewServer(
 		clientOpt,
 		asynq.Config{Concurrency: 10},
 	)
 
 	client := asynq.NewClient(clientOpt)
-	taskHandler := &TaskHandler{Client: client}
+	taskHandler := &TaskHandler{
+		Client:   client,
+		Database: toktik_db,
+	}
 
 	mux := asynq.NewServeMux()
 	mux.HandleFunc(TypeVideoSave, taskHandler.WithContext(HandleVideoSaveTask))
 	mux.HandleFunc(TypeVideoThumbnail, taskHandler.WithContext(HandleVideoThumbnailTask))
 	mux.HandleFunc(TypeVideoConvertMPD, taskHandler.WithContext(HandleVideoConvertMPDTask))
+	mux.HandleFunc(TypeVideoUpdateProgress, taskHandler.WithContext(HandleVideoUpdateProgressTask))
 
 	if err := srv.Run(mux); err != nil {
 		log.Fatal(err)
