@@ -72,7 +72,7 @@ func main() {
 	clientOpt := asynq.RedisClientOpt{Addr: "localhost:6379"}
 
 	// TODO: Load this via environments.
-	dsn := "user:password@tcp(mysql:3306)/toktik-db?charset=utf8mb4&parseTime=True&loc=Local"
+	dsn := "user:password@tcp(localhost:3306)/toktik-db?charset=utf8mb4&parseTime=True&loc=Local"
 	toktik_db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
 	if err != nil {
 		log.Panicln("Error: Failed to connect to the database.")

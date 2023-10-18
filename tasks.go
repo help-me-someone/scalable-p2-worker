@@ -16,7 +16,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/help-me-someone/scalable-p2-db/functions/crud"
-	"github.com/help-me-someone/scalable-p2-db/models/video"
 	"github.com/hibiken/asynq"
 	ffmpeg "github.com/u2takey/ffmpeg-go"
 	"gorm.io/gorm"

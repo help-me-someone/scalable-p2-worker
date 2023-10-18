@@ -7,8 +7,11 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.18.45
 	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.11.90
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.40.2
+	github.com/help-me-someone/scalable-p2-db v0.0.0-20231017203544-b1776c9f1651
 	github.com/hibiken/asynq v0.24.1
 	github.com/u2takey/ffmpeg-go v0.5.0
+	gorm.io/driver/mysql v1.5.2
+	gorm.io/gorm v1.25.5
 )
 
 require (
@@ -30,9 +33,9 @@ require (
 	github.com/aws/smithy-go v1.15.0 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
+	github.com/go-sql-driver/mysql v1.7.0 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/google/uuid v1.2.0 // indirect
-	github.com/help-me-someone/scalable-p2-db v0.0.0-20231017203544-b1776c9f1651 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
@@ -43,5 +46,4 @@ require (
 	golang.org/x/sys v0.1.0 // indirect
 	golang.org/x/time v0.0.0-20190308202827-9d24e82272b4 // indirect
 	google.golang.org/protobuf v1.26.0 // indirect
-	gorm.io/gorm v1.25.5 // indirect
 )
