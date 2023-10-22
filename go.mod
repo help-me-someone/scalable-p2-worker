@@ -7,7 +7,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.18.45
 	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.11.90
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.40.2
-	github.com/help-me-someone/scalable-p2-db v0.0.0-20231017203544-b1776c9f1651
+	github.com/help-me-someone/scalable-p2-db v0.0.0-20231022163606-f177dcaa298a
 	github.com/hibiken/asynq v0.24.1
 	github.com/u2takey/ffmpeg-go v0.5.0
 	gorm.io/driver/mysql v1.5.2
@@ -33,14 +33,16 @@ require (
 	github.com/aws/smithy-go v1.15.0 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
-	github.com/go-sql-driver/mysql v1.7.0 // indirect
+	github.com/go-sql-driver/mysql v1.7.1 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/google/uuid v1.2.0 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
+	github.com/julienschmidt/httprouter v1.3.0 // indirect
 	github.com/redis/go-redis/v9 v9.0.3 // indirect
 	github.com/robfig/cron/v3 v3.0.1 // indirect
+	github.com/rs/cors v1.10.1 // indirect
 	github.com/spf13/cast v1.3.1 // indirect
 	github.com/u2takey/go-utils v0.3.1 // indirect
 	golang.org/x/sys v0.1.0 // indirect

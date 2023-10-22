@@ -485,15 +485,8 @@ func HandleVideoUpdateProgressTask(ctx context.Context, t *asynq.Task) error {
 		return fmt.Errorf("No database connection in task's context.")
 	}
 
-	// 2. Get the video from the name.
-	vid, err := crud.GetVideoByKey(connection, p.VideoName)
-	if err != nil {
-		log.Println("Error: Could not retrieve video.")
-		return err
-	}
-
-	// 3. Update the status of the job.
-	err = crud.UpdateVideoStatus(connection, vid.ID, p.Status)
+	// 2. Update the status of the job.
+	err := crud.UpdateVideoStatusByKey(connection, p.VideoName, p.Status)
 	if err != nil {
 		log.Println("Error: Failed to update video status.")
 		return err
