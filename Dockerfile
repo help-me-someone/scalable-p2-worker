@@ -6,7 +6,7 @@ WORKDIR /app
 
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux go build -o app ./...
+RUN CGO_ENABLED=0 GOOS=linux go build -o app main.go
 
 # Deploy Stage
 FROM alpine:3
