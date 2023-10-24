@@ -16,15 +16,15 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/help-me-someone/scalable-p2-db/functions/crud"
-	"github.com/help-me-someone/scalable-p2-db/models/video"
 	"github.com/hibiken/asynq"
 	ffmpeg "github.com/u2takey/ffmpeg-go"
 	"gorm.io/gorm"
 )
 
 type TaskHandler struct {
-	Client   *asynq.Client
-	Database *gorm.DB
+	Client    *asynq.Client
+	Database  *gorm.DB
+	AWSClient *s3.Client
 }
 
 type Task func(ctx context.Context, t *asynq.Task) error
@@ -33,15 +33,24 @@ func (h *TaskHandler) WithContext(task Task) Task {
 	return func(ctx context.Context, t *asynq.Task) error {
 		ctx = context.WithValue(ctx, "client", h.Client)
 		ctx = context.WithValue(ctx, "database", h.Database)
+		ctx = context.WithValue(ctx, "aws", h.AWSClient)
 		return task(ctx, t)
 	}
+}
+func (th *TaskHandler) ContextMiddleware(h asynq.Handler) asynq.Handler {
+	return asynq.HandlerFunc(func(ctx context.Context, t *asynq.Task) error {
+		ctx = context.WithValue(ctx, "client", th.Client)
+		ctx = context.WithValue(ctx, "database", th.Database)
+		ctx = context.WithValue(ctx, "aws", th.AWSClient)
+		return h.ProcessTask(ctx, t)
+	})
 }
 
 // A list of task types.
 const (
 	TypeVideoSave           = "video:save"
 	TypeVideoThumbnail      = "video:thumbnail"
-	TypeVideoConvertMPD     = "video:chunk"
+	TypeVideoConvertHLS     = "video:chunk"
 	TypeVideoUpdateProgress = "video:update"
 )
 
@@ -55,14 +64,14 @@ type VideoThumbnailPayload struct {
 	VideoName string
 }
 
-type VideoConvertMPDPayload struct {
+type VideoConvertHLSPayload struct {
 	UserID    string
 	VideoName string
 }
 
 type VideoUpdateProgressPayload struct {
+	UserID    string
 	VideoName string
-	Status    uint8
 }
 
 //----------------------------------------------
@@ -86,16 +95,19 @@ func NewVideoThumbnailTask(userID string, videoName string) (*asynq.Task, error)
 	return asynq.NewTask(TypeVideoThumbnail, payload), nil
 }
 
-func NewVideoConvertMPDTask(userID string, videoName string) (*asynq.Task, error) {
-	payload, err := json.Marshal(VideoConvertMPDPayload{UserID: userID, VideoName: videoName})
+func NewVideoConvertHLSTask(userID string, videoName string) (*asynq.Task, error) {
+	payload, err := json.Marshal(VideoConvertHLSPayload{UserID: userID, VideoName: videoName})
 	if err != nil {
 		return nil, err
 	}
-	return asynq.NewTask(TypeVideoConvertMPD, payload), nil
+	return asynq.NewTask(TypeVideoConvertHLS, payload), nil
 }
 
-func NewVideoUpdateProgressTask(videoName string, status uint8) (*asynq.Task, error) {
-	payload, err := json.Marshal(VideoUpdateProgressPayload{VideoName: videoName, Status: status})
+func NewVideoUpdateProgressTask(userID string, videoName string) (*asynq.Task, error) {
+	payload, err := json.Marshal(VideoUpdateProgressPayload{
+		UserID:    userID,
+		VideoName: videoName,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -205,22 +217,25 @@ func HandleVideoSaveTask(ctx context.Context, t *asynq.Task) error {
 	log.Println("Successfully uploaded converted file to bucket")
 
 	//
-	// Queue the next job. We generate the thumbnail.
+	// Queue the next job. We generate the thumbnail
+	// and do the conversion at the same time.
 	//
 	t1, err := NewVideoThumbnailTask(p.UserID, p.VideoName)
+	_, err = queueClient.Enqueue(t1)
 	if err != nil {
-		log.Panicln("Failed to create next task")
+		log.Panicln("Failed the queue next task")
 		return err
 	}
-	_, err = queueClient.Enqueue(t1)
+	t2, err := NewVideoConvertHLSTask(p.UserID, p.VideoName)
+	_, err = queueClient.Enqueue(t2)
 	if err != nil {
 		log.Panicln("Failed the queue next task")
 		return err
 	}
 
 	// Queue the status update
-	t2, err := NewVideoUpdateProgressTask(p.VideoName, video.VIDEO_THUMBNAILING)
-	_, err = queueClient.Enqueue(t2)
+	t3, err := NewVideoUpdateProgressTask(p.UserID, p.VideoName)
+	_, err = queueClient.Enqueue(t3)
 
 	return nil
 }
@@ -252,13 +267,12 @@ func uploadDirToS3(dir string, username string, videoname string, uploader *mana
 		}
 		return nil
 	})
-
 }
 
-func HandleVideoConvertMPDTask(ctx context.Context, t *asynq.Task) error {
+func HandleVideoConvertHLSTask(ctx context.Context, t *asynq.Task) error {
 	log.Println("Handing convert")
 
-	var p VideoConvertMPDPayload
+	var p VideoConvertHLSPayload
 	if err := json.Unmarshal(t.Payload(), &p); err != nil {
 		return fmt.Errorf("json.Unmarshal failed: %v: %w", err, asynq.SkipRetry)
 	}
@@ -270,8 +284,7 @@ func HandleVideoConvertMPDTask(ctx context.Context, t *asynq.Task) error {
 		return err
 	}
 	log.Println("Job dir:", jobDir)
-	// TODO: Uncomment this.
-	// defer os.RemoveAll(jobDir)
+	defer os.RemoveAll(jobDir)
 
 	// Step 1. Make a new client.
 	// For aws.
@@ -311,7 +324,7 @@ func HandleVideoConvertMPDTask(ctx context.Context, t *asynq.Task) error {
 
 	log.Println("Running ")
 
-	// Decare the directory the MPD files will go into
+	// Decare the directory the HLS files will go into
 	mpdDirPath, err := os.MkdirTemp(jobDir, "hls")
 	if err != nil {
 		log.Println("Failed to create mpd directory")
@@ -326,7 +339,7 @@ func HandleVideoConvertMPDTask(ctx context.Context, t *asynq.Task) error {
 		Output(filePathHLSPath, ffmpeg.KwArgs{
 			"codec":         "copy",
 			"start_number":  0,
-			"hls_time":      10,
+			"hls_time":      5,
 			"hls_list_size": 0,
 			"f":             "hls",
 		}).
@@ -347,22 +360,10 @@ func HandleVideoConvertMPDTask(ctx context.Context, t *asynq.Task) error {
 		return err
 	}
 
-	log.Println("Successfully uploaded converted files (MPD) to bucket")
-
-	//
-	// Clean up. Remove the original file, since it won't be used anymore.
-	//
-	_, err = awsClient.DeleteObject(context.TODO(), &s3.DeleteObjectInput{
-		Bucket: aws.String("toktik-videos"),
-		Key:    aws.String(bucketVidPath), // We save it using the same address.
-	})
-	if err != nil {
-		log.Println("Failed to delete original video file", err)
-		return err
-	}
+	log.Println("Successfully uploaded converted files (HLS) to bucket")
 
 	// Queue the status update
-	t2, err := NewVideoUpdateProgressTask(p.VideoName, video.VIDEO_READY)
+	t2, err := NewVideoUpdateProgressTask(p.UserID, p.VideoName)
 	_, err = queueClient.Enqueue(t2)
 
 	return nil
@@ -466,25 +467,12 @@ func HandleVideoThumbnailTask(ctx context.Context, t *asynq.Task) error {
 
 	log.Println("Successfully created a thumbnail")
 
-	//
-	// Queue our next job. We convert it to mpd.
-	//
-	t1, err := NewVideoConvertMPDTask(p.UserID, p.VideoName)
-	if err != nil {
-		log.Println("Failed to create convert MPD task")
-		return err
-	}
-
-	// Queue the task.
+	// Queue the status update
+	t1, err := NewVideoUpdateProgressTask(p.UserID, p.VideoName)
 	_, err = queueClient.Enqueue(t1)
 	if err != nil {
-		log.Println("Failed to queue MPD conversion task")
 		return err
 	}
-
-	// Queue the status update
-	t2, err := NewVideoUpdateProgressTask(p.VideoName, video.VIDEO_CHUNKING)
-	_, err = queueClient.Enqueue(t2)
 
 	return nil
 }
@@ -503,10 +491,36 @@ func HandleVideoUpdateProgressTask(ctx context.Context, t *asynq.Task) error {
 	}
 
 	// 2. Update the status of the job.
-	err := crud.UpdateVideoStatusByKey(connection, p.VideoName, p.Status)
+	//    This is horrible since I'm just incrementing the number,
+	//    but by doing it this way, the ordering of async jobs pretty
+	//    much becomes irrelevant to me.
+	err := crud.UpdateVideoStatusIncrementByKey(connection, p.VideoName)
 	if err != nil {
 		log.Println("Error: Failed to update video status.")
 		return err
+	}
+
+	// Check the new status.
+	v, _ := crud.GetVideoByKey(connection, p.VideoName)
+	status := v.Status
+
+	// Three means that it has generated the thumbnail and it has been chunked.
+	// We can now safely clean up and delete the mp4 file.
+	if status == 3 {
+		//
+		// Clean up. Remove the original file, since it won't be used anymore.
+		//
+		awsClient := ctx.Value("aws").(*s3.Client)
+		bucketDir := fmt.Sprintf("users/%s/videos/%s", p.UserID, p.VideoName)
+		bucketVidPath := fmt.Sprintf("%s/vid", bucketDir)
+		_, err = awsClient.DeleteObject(context.TODO(), &s3.DeleteObjectInput{
+			Bucket: aws.String("toktik-videos"),
+			Key:    aws.String(bucketVidPath),
+		})
+		if err != nil {
+			log.Println("Failed to delete original video file", err)
+			return err
+		}
 	}
 
 	return nil

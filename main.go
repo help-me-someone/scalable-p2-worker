@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -56,6 +57,19 @@ func makeAWSClient(region string) (*s3.Client, error) {
 	return s3.NewFromConfig(cfg), nil
 }
 
+func loggingMiddleware(h asynq.Handler) asynq.Handler {
+	return asynq.HandlerFunc(func(ctx context.Context, t *asynq.Task) error {
+		start := time.Now()
+		log.Printf("Start processing %q", t.Type())
+		err := h.ProcessTask(ctx, t)
+		if err != nil {
+			return err
+		}
+		log.Printf("Finished processing %q: Elapsed Time = %v", t.Type(), time.Since(start))
+		return nil
+	})
+}
+
 func main() {
 
 	// Create temp folder for files to live in.
@@ -69,10 +83,10 @@ func main() {
 		}
 	}
 
-	clientOpt := asynq.RedisClientOpt{Addr: "localhost:6379"}
+	clientOpt := asynq.RedisClientOpt{Addr: "redis:6379"}
 
 	// TODO: Load this via environments.
-	dsn := "user:password@tcp(localhost:3306)/toktik-db?charset=utf8mb4&parseTime=True&loc=Local"
+	dsn := "user:password@tcp(mysql:3306)/toktik-db?charset=utf8mb4&parseTime=True&loc=Local"
 	toktik_db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
 	if err != nil {
 		log.Panicln("Error: Failed to connect to the database.")
@@ -80,20 +94,31 @@ func main() {
 
 	srv := asynq.NewServer(
 		clientOpt,
-		asynq.Config{Concurrency: 10},
+		asynq.Config{
+			Concurrency: 10,
+			IsFailure: func(err error) bool {
+				log.Println(err)
+				return err != nil
+			},
+		},
 	)
 
 	client := asynq.NewClient(clientOpt)
+	awsClient, _ := makeAWSClient(region)
+
 	taskHandler := &TaskHandler{
-		Client:   client,
-		Database: toktik_db,
+		Client:    client,
+		Database:  toktik_db,
+		AWSClient: awsClient,
 	}
 
 	mux := asynq.NewServeMux()
-	mux.HandleFunc(TypeVideoSave, taskHandler.WithContext(HandleVideoSaveTask))
-	mux.HandleFunc(TypeVideoThumbnail, taskHandler.WithContext(HandleVideoThumbnailTask))
-	mux.HandleFunc(TypeVideoConvertMPD, taskHandler.WithContext(HandleVideoConvertMPDTask))
-	mux.HandleFunc(TypeVideoUpdateProgress, taskHandler.WithContext(HandleVideoUpdateProgressTask))
+	mux.Use(loggingMiddleware)
+	mux.Use(taskHandler.ContextMiddleware)
+	mux.HandleFunc(TypeVideoSave, HandleVideoSaveTask)
+	mux.HandleFunc(TypeVideoThumbnail, HandleVideoThumbnailTask)
+	mux.HandleFunc(TypeVideoConvertHLS, HandleVideoConvertHLSTask)
+	mux.HandleFunc(TypeVideoUpdateProgress, HandleVideoUpdateProgressTask)
 
 	if err := srv.Run(mux); err != nil {
 		log.Fatal(err)

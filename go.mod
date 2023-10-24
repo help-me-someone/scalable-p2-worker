@@ -7,7 +7,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.18.45
 	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.11.90
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.40.2
-	github.com/help-me-someone/scalable-p2-db v0.0.0-20231024085821-ce65958ae4fe
+	github.com/help-me-someone/scalable-p2-db v0.0.0-20231024132804-913e7f22fc66
 	github.com/hibiken/asynq v0.24.1
 	github.com/u2takey/ffmpeg-go v0.5.0
 	gorm.io/driver/mysql v1.5.2

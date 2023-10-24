@@ -76,6 +76,8 @@ github.com/help-me-someone/scalable-p2-db v0.0.0-20231022163606-f177dcaa298a h1:
 github.com/help-me-someone/scalable-p2-db v0.0.0-20231022163606-f177dcaa298a/go.mod h1:BTOiq+BRnS0Z63IffLN6ZENZ/6hkqAPkZc6fdt7merU=
 github.com/help-me-someone/scalable-p2-db v0.0.0-20231024085821-ce65958ae4fe h1:19FKZGetESHm6geHECUWBjV9bcd0Efmw/2fOfT003e4=
 github.com/help-me-someone/scalable-p2-db v0.0.0-20231024085821-ce65958ae4fe/go.mod h1:BTOiq+BRnS0Z63IffLN6ZENZ/6hkqAPkZc6fdt7merU=
+github.com/help-me-someone/scalable-p2-db v0.0.0-20231024132804-913e7f22fc66 h1:ns4dNsE+CTzAvseiXGMQewuW2/8hiQWqYemmjTpnxN4=
+github.com/help-me-someone/scalable-p2-db v0.0.0-20231024132804-913e7f22fc66/go.mod h1:BTOiq+BRnS0Z63IffLN6ZENZ/6hkqAPkZc6fdt7merU=
 github.com/hibiken/asynq v0.24.1 h1:+5iIEAyA9K/lcSPvx3qoPtsKJeKI5u9aOIvUmSsazEw=
 github.com/hibiken/asynq v0.24.1/go.mod h1:u5qVeSbrnfT+vtG5Mq8ZPzQu/BmCKMHvTGb91uy9Tts=
 github.com/jinzhu/inflection v1.0.0 h1:K317FqzuhWc8YvSVlFMCCUb36O/S9MCKRDI7QkRKD/E=
