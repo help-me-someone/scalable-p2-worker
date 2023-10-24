@@ -16,6 +16,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/help-me-someone/scalable-p2-db/functions/crud"
+	"github.com/help-me-someone/scalable-p2-db/models/video"
 	"github.com/hibiken/asynq"
 	ffmpeg "github.com/u2takey/ffmpeg-go"
 	"gorm.io/gorm"
@@ -211,13 +212,15 @@ func HandleVideoSaveTask(ctx context.Context, t *asynq.Task) error {
 		log.Panicln("Failed to create next task")
 		return err
 	}
-
-	// Queue the task.
 	_, err = queueClient.Enqueue(t1)
 	if err != nil {
 		log.Panicln("Failed the queue next task")
 		return err
 	}
+
+	// Queue the status update
+	t2, err := NewVideoUpdateProgressTask(p.VideoName, video.VIDEO_THUMBNAILING)
+	_, err = queueClient.Enqueue(t2)
 
 	return nil
 }
@@ -275,6 +278,12 @@ func HandleVideoConvertMPDTask(ctx context.Context, t *asynq.Task) error {
 	awsClient, err := makeAWSClient(region)
 	if err != nil {
 		return fmt.Errorf("failed to create aws client: %v: %w", err, asynq.SkipRetry)
+	}
+	// For asynq.
+	qC := ctx.Value("client")
+	queueClient, ok := qC.(*asynq.Client)
+	if qC == nil || !ok {
+		return fmt.Errorf("failed to retrieve asynq client: %v: %w", err, asynq.SkipRetry)
 	}
 
 	// Step 2. Create a downloader.
@@ -351,6 +360,10 @@ func HandleVideoConvertMPDTask(ctx context.Context, t *asynq.Task) error {
 		log.Println("Failed to delete original video file", err)
 		return err
 	}
+
+	// Queue the status update
+	t2, err := NewVideoUpdateProgressTask(p.VideoName, video.VIDEO_READY)
+	_, err = queueClient.Enqueue(t2)
 
 	return nil
 }
@@ -468,6 +481,10 @@ func HandleVideoThumbnailTask(ctx context.Context, t *asynq.Task) error {
 		log.Println("Failed to queue MPD conversion task")
 		return err
 	}
+
+	// Queue the status update
+	t2, err := NewVideoUpdateProgressTask(p.VideoName, video.VIDEO_CHUNKING)
+	_, err = queueClient.Enqueue(t2)
 
 	return nil
 }
