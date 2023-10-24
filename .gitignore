@@ -19,3 +19,5 @@ temp/
 
 # Go workspace file
 go.work
+
+worker
